@@ -6,15 +6,18 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundColor(.accentColor)
-            Text("Hello, world!")
+        HStack(alignment: .bottom) {
+            Text("Monster Cans")
+                .font(.title)
+            Spacer()
+            Text("Num:3")
+                
         }
+        .padding()
         .padding()
     }
 }
