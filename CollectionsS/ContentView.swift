@@ -55,13 +55,13 @@ extension Item: Hashable {
 
 struct ContentView: View {
   @State private var collections = [ //Sample Text used for testing
-    Collection(title:"Collection 1", description: "Sample 1", items:[Item(title:"Item A"),Item(title:"Item B")]),
-    Collection(title:"Collection 2", description: "Sample 2",items:[Item(title: "Item C")])
-               ]
+    Collection(title:"Collection 1", description: "Sample 1", items:[Item(title:"Item A"),Item(title:"Item B")])]
   @State private var newCollectionTitle = ""
+  @State private var newItemTitle = ""
   @State private var newDescription = ""
-  @State private var newItems = [Item(title:" ")]
+  @State private var newItems = [Item(title:"Sample")]
   @State private var isAddingCollection = false
+  @State private var isAddingItem = false
   @State private var AddCollectionError = false
 
 
@@ -71,7 +71,12 @@ struct ContentView: View {
                 List {
                     ForEach($collections, id: \.self) { $collection in
                         NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list:$collection.items)) {
-                            Text(collection.title)
+                            HStack{
+                                Text(collection.title)
+                                Spacer()
+                                Text(String(collection.items.count) + " Items")
+                                    .foregroundColor(.gray)
+                            }
                         }
                     }
                     .onDelete(perform: delete)
@@ -80,13 +85,16 @@ struct ContentView: View {
                 .sheet(isPresented: $isAddingCollection) {
                     NewCollectionView(isAddingCollection: $isAddingCollection,AddCollectionError: $AddCollectionError, collections: $collections, newCollectionTitle: $newCollectionTitle, newDescription: $newDescription, newItems: $newItems)
                 }
+                .sheet(isPresented:$isAddingItem){
+                    NewItemView(isAddingItem:$isAddingItem, collections: $collections, newItemTitle: $newItemTitle)
+                }
             }
             
             VStack {
                 Spacer()
                 HStack {
                     Spacer()
-                    AddCollectionView(isAddingCollection: $isAddingCollection, AddCollectionError: $AddCollectionError)
+                    AddView(isAddingCollection: $isAddingCollection, AddCollectionError: $AddCollectionError, isAddingItem: $isAddingItem)
                 }
             }
         }
@@ -99,6 +107,7 @@ struct ContentView: View {
         .onDisappear {
             saveCollections(collections: collections)
                 }
+        
     }
   func delete(at offsets: IndexSet) {
     collections.remove(atOffsets: offsets)
@@ -250,21 +259,68 @@ struct NewCollectionView: View {
   }
 }
 
-struct AddCollectionView: View {
-  @Binding var isAddingCollection: Bool
-  @Binding var AddCollectionError: Bool
+struct NewItemView: View {
+    @Binding var isAddingItem: Bool
+    @Binding var collections: [Collection]
+    @Binding var newItemTitle: String
+    @State private var selectedCollection: Collection? = nil
 
-  var body: some View {
-    Button(action: {
-      self.isAddingCollection = true
-      self.AddCollectionError = false
-    }) {
-      Image(systemName: "plus.circle.fill")
-        .font(.largeTitle)
-        .foregroundColor(.blue)
-        .padding()
+    var body: some View {
+      NavigationView {
+          if selectedCollection == nil {
+              List{
+                  ForEach(collections, id: \.self) { name in
+                      Button(action: {
+                          selectedCollection = name
+                      }){
+                          Text(name.title)
+                      }
+                }
+              }
+          }
+          else {
+              VStack {
+                  Divider()
+                  TextField("Item title", text: $newItemTitle)
+                      .padding(.horizontal)
+                  Spacer()
+                  Button(action: {
+                      if let selectedCollection = selectedCollection {
+                          selectedCollection.items.append(Item(title:newItemTitle))
+                      }
+                      self.isAddingItem = false
+                      self.newItemTitle = ""
+                  }){
+                      Text("Add Item")
+                  }
+              }
+              .navigationBarTitle(Text("Add New Item"))
+          }
+      }
     }
   }
+
+struct AddView: View {
+  @Binding var isAddingCollection: Bool
+  @Binding var AddCollectionError: Bool
+  @Binding var isAddingItem: Bool
+
+    var body: some View {
+        Menu{
+            Button("Add Collection"){
+                self.isAddingCollection = true
+                self.AddCollectionError = false
+            }
+            Button("Add Item"){
+                self.isAddingItem = true
+            }
+        } label:{
+            Label("", systemImage: "plus.circle.fill")
+                .font(.largeTitle)
+                .foregroundColor(.blue)
+                .padding()
+        }
+    }
 }
 
 struct ContentView_Previews: PreviewProvider {
@@ -273,4 +329,5 @@ struct ContentView_Previews: PreviewProvider {
   }
 }
 
-// Add different colors for light and dark mode
+//Add a message to add item screen when there is no collection
+//Delete data when closing add screen
