@@ -1,9 +1,8 @@
 //
 //
 //Developed by Nic-Alexander Strutz for a Computer Science IA
-//Many thanks to ChatGPT
-// Version: 28 July 2023
-//I am defeated
+//Credits to ChatGPT
+// Version: 26 July 2023
 
 
 import SwiftUI
@@ -11,6 +10,7 @@ import Foundation
 import PhotosUI
 
 //Global Variables
+var isOnItemView = false
 class Item: Identifiable, Codable {
     var id = UUID()
     var title:String
@@ -34,20 +34,17 @@ class Collection: Codable, Identifiable {
     var title:String
     var description:String
     var items:[Item]
-    var incImage: Bool //Standing for inc Image, i.e. does the collection include images
     
-    init(title:String, description:String, items:[Item], incImage: Bool){
+    init(title:String, description:String, items:[Item]){
         self.title = title
         self.description = description
         self.items = items
-        self.incImage = incImage
     }
     func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(title, forKey: .title)
             try container.encode(description, forKey: .description)
             try container.encode(items, forKey: .items)
-            try container.encode(incImage, forKey: .incImage)
         }
 }
 extension Collection: Hashable {
@@ -70,57 +67,25 @@ extension Item: Hashable {
     }
 }
 
-var Storage: [Collection] = []
-
-func saveCollections(){
-    do {
-        let encoder = PropertyListEncoder()
-        encoder.outputFormat = .xml // or .binary for binary format
-
-        let data = try encoder.encode(Storage)
-        let fileURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-                    .appendingPathComponent("Collections.plist")
-        try data.write(to: fileURL)
-        } catch {
-        print("Error saving collections to property list: \(error)")
-                }
-}
-func loadCollections() {
-        do {
-            let fileURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-                .appendingPathComponent("Collections.plist")
-            let data = try Data(contentsOf: fileURL)
-            let decoder = PropertyListDecoder()
-            Storage = try decoder.decode([Collection].self, from: data)
-        } catch {
-            print("Error loading collections from property list: \(error)")
-            Storage = []
-        }
-    }
-func addSampleCollection() {
-        let sampleCollection = Collection(title: "Sample Collection", description: "This is a sample collection", items: [
-            Item(title: "Item 1"),
-            Item(title: "Item 2"),
-            Item(title: "Item 3")],
-            incImage: false)
-
-        Storage.append(sampleCollection)
-}
-
-
 struct ContentView: View {
+  @State private var collections = [ //Sample Text used for testing
+    Collection(title:"", description: "", items:[Item(title:"")])]
+  @State private var newCollectionTitle = ""
   @State private var newItemTitle = ""
+  @State private var newDescription = ""
+  @State private var newItems = [Item(title:"Sample")]
   @State private var isAddingCollection = false
   @State private var isAddingItem = false
   @State private var AddCollectionError = false
   @State private var updater = false
 
+
     var body: some View {
         ZStack {
             NavigationView {
                 List {
-                    ForEach(Storage, id: \.self) { collection in
-                        NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list: collection.items, updater: $updater, incImage: collection.incImage)) {
+                    ForEach($collections, id: \.self) { $collection in
+                        NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list:$collection.items, updater: $updater)) {
                             HStack{
                                 Text(collection.title)
                                 Spacer()
@@ -135,12 +100,13 @@ struct ContentView: View {
                 }
                 .navigationTitle(Text("Collections"))
                 .sheet(isPresented: $isAddingCollection) {
-                    NewCollectionView(isAddingCollection: $isAddingCollection,AddCollectionError: $AddCollectionError)
+                    NewCollectionView(isAddingCollection: $isAddingCollection,AddCollectionError: $AddCollectionError, collections: $collections, newCollectionTitle: $newCollectionTitle, newDescription: $newDescription, newItems: $newItems)
                 }
                 .sheet(isPresented:$isAddingItem){
-                    NewItemView(isAddingItem:$isAddingItem, newItemTitle: $newItemTitle, updater: $updater)
+                    NewItemView(isAddingItem:$isAddingItem, collections: $collections, newItemTitle: $newItemTitle, updater: $updater)
                 }
             }
+            
             VStack {
                 Spacer()
                 HStack {
@@ -150,19 +116,53 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            loadCollections()
-            if Storage.isEmpty {
+            collections = loadCollections()
+            if collections.isEmpty {
                 addSampleCollection()
             }
         }
         .onDisappear {
-            saveCollections()
+            saveCollections(collections: collections)
                 }
         
     }
   func delete(at offsets: IndexSet) {
-    Storage.remove(atOffsets: offsets)
+    collections.remove(atOffsets: offsets)
   }
+    func saveCollections(collections:[Collection]){
+        do {
+            let encoder = PropertyListEncoder()
+            encoder.outputFormat = .xml // or .binary for binary format
+
+            let data = try encoder.encode(collections)
+            let fileURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+                        .appendingPathComponent("Collections.plist")
+            try data.write(to: fileURL)
+           } catch {
+            print("Error saving collections to property list: \(error)")
+                   }
+    }
+    func loadCollections() -> [Collection] {
+            do {
+                let fileURL = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+                    .appendingPathComponent("Collections.plist")
+                let data = try Data(contentsOf: fileURL)
+                let decoder = PropertyListDecoder()
+                return try decoder.decode([Collection].self, from: data)
+            } catch {
+                print("Error loading collections from property list: \(error)")
+                return []
+            }
+        }
+    func addSampleCollection() {
+            let sampleCollection = Collection(title: "Sample Collection", description: "This is a sample collection", items: [
+                Item(title: "Item 1"),
+                Item(title: "Item 2"),
+                Item(title: "Item 3")
+            ])
+
+            collections.append(sampleCollection)
+        }
 }
 
 struct DetailView: View {
@@ -172,30 +172,30 @@ struct DetailView: View {
   @Binding var updater: Bool
   @State private var showingPopover = false
   @State private var photoData = Data()
-  var incImage: Bool
 
     var body: some View {
         ZStack{
-            List {
-                ForEach(list, id: \.self)  { item in
-                        NavigationLink(destination:ItemView(ItemTitle: item.title, ItemPhoto: item.photo ?? Data())) {
+                List {
+                    ForEach(list, id: \.self) { item in
+                        NavigationLink(destination:ItemView(ItemTitle: item.title)) {
                             HStack{
                                 if let photoData = item.photo {
                                     if let image = UIImage(data: photoData){
                                         Image(uiImage:image)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 50, height: 50)
-                                            .clipped()
+                                         .resizable()
+                                         .aspectRatio(contentMode: .fill)
+                                         .frame(width: 50, height: 50)
+                                         .clipped()
                                     }
                                 }
                                 Text(item.title)
                             }
                         }
+                    }
+                    .onDelete(perform: delete)
                 }
-                .onDelete(perform: delete)
-            }
-            .navigationTitle("\(collectionTitle)")
+                .navigationTitle("\(collectionTitle)")
+            .if(isOnItemView == true){view in view.toolbar(.hidden)} //figure out how this works
             .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                       Button(action: {
@@ -208,13 +208,7 @@ struct DetailView: View {
                   }
             .popover(isPresented: $showingPopover){
                 VStack{
-                    if collectionDescription.trimmingCharacters(in: .whitespacesAndNewlines) != ""{
-                        Text(collectionDescription)
-                    }
-                    else {
-                        Text("No Description")
-                    }
-                    Text("Includes Images: " + String(incImage).capitalized)
+                    Text(collectionDescription)
                 }
             }
         }
@@ -227,35 +221,30 @@ struct DetailView: View {
 
 struct ItemView: View {
     var ItemTitle: String
-    var ItemPhoto: Data?
-    
+    var isOnItemView = true
     var body: some View{
         NavigationView {
-            VStack{
-                Text("HIII")
-                if let ItemPhoto = ItemPhoto {
-                    if let image = UIImage(data: ItemPhoto){
-                        Image(uiImage:image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 100, height: 100)
-                            .clipped()
-                    }
-                }
-            }
+            Text("HIII")
         }
         .navigationTitle(Text("\(ItemTitle)"))
     }
 }
-
-
+extension View {
+    @ViewBuilder func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+            if condition {
+                transform(self)
+            } else {
+                self
+            }
+        }
+}
 struct NewCollectionView: View {
   @Binding var isAddingCollection: Bool
   @Binding var AddCollectionError: Bool
-  @State private var newCollectionTitle = ""
-  @State private var newDescription = ""
-  @State private var newItems = [Item(title:"Sample")]
-  @State private var incImage = false
+  @Binding var collections: [Collection]
+  @Binding var newCollectionTitle: String
+  @Binding var newDescription: String
+  @Binding var newItems: [Item]
 
   var body: some View {
     NavigationView {
@@ -265,13 +254,10 @@ struct NewCollectionView: View {
           .padding(.horizontal)
         TextField("Description", text: $newDescription)
             .padding(.horizontal)
-          Divider()
-          Toggle("hi", isOn: $incImage)
-              .tint(.blue)
         Spacer()
         Button(action: {
             if self.newCollectionTitle != ""{
-                Storage.append(Collection(title:self.newCollectionTitle, description:self.newDescription, items:self.newItems, incImage:self.incImage))
+                self.collections.append(Collection(title:self.newCollectionTitle, description:self.newDescription, items:self.newItems))
                 self.newCollectionTitle = ""
                 self.newDescription = ""
                 self.isAddingCollection = false
@@ -306,6 +292,7 @@ struct NewCollectionView: View {
 
 struct NewItemView: View {
     @Binding var isAddingItem: Bool
+    @Binding var collections: [Collection]
     @Binding var newItemTitle: String
     @Binding var updater: Bool
     @State private var selectedCollection: Collection? = nil
@@ -317,7 +304,7 @@ struct NewItemView: View {
           if selectedCollection == nil {
               VStack{
                   List{
-                      ForEach(Storage, id: \.self) { name in
+                      ForEach(collections, id: \.self) { name in
                           Button(action: {
                               selectedCollection = name
                           }){
@@ -333,25 +320,23 @@ struct NewItemView: View {
                   Divider()
                   TextField("Item title", text: $newItemTitle)
                       .padding(.horizontal)
-                  if (selectedCollection?.incImage == true) {
-                      HStack{
-                          if let selectedPhotoData,
-                             let image = UIImage(data: selectedPhotoData){
-                              Image(uiImage:image)
-                                  .resizable()
-                                  .aspectRatio(contentMode: .fill)
-                                  .frame(width: 50, height: 50, alignment: .leading)
-                          }
-                          Spacer()
-                              .frame(width: 100)
-                          PhotosPicker(selection: $selectedItem, matching: .any(of: [.images, .not(.livePhotos)])){
-                              Text("Select a Photo")
-                          }
-                          .onChange(of: selectedItem) { newImage in
-                              Task {
-                                  if let data = try? await newImage?.loadTransferable(type: Data.self) {
-                                      selectedPhotoData = data
-                                  }
+                  HStack{
+                      if let selectedPhotoData,
+                         let image = UIImage(data: selectedPhotoData){
+                          Image(uiImage:image)
+                              .resizable()
+                              .aspectRatio(contentMode: .fill)
+                              .frame(width: 50, height: 50, alignment: .leading)
+                      }
+                      Spacer()
+                          .frame(width: 100)
+                      PhotosPicker(selection: $selectedItem, matching: .any(of: [.images, .not(.livePhotos)])){
+                          Text("Select a Photo")
+                      }
+                      .onChange(of: selectedItem) { newImage in
+                          Task {
+                              if let data = try? await newImage?.loadTransferable(type: Data.self) {
+                                  selectedPhotoData = data
                               }
                           }
                       }
