@@ -1,8 +1,8 @@
 //
 //
 //Developed by Nic-Alexander Strutz for a Computer Science IA
-//Credits to ChatGPT
-// Version: 26 July 2023
+//
+// Version: 18 September 2023
 
 
 import SwiftUI
@@ -34,18 +34,14 @@ class Collection: Codable, Identifiable {
     var title:String
     var description:String
     var items:[Item]
+    var showingImage: Bool
     
-    init(title:String, description:String, items:[Item]){
+    init(title:String, description:String, items:[Item], showingImage: Bool){
         self.title = title
         self.description = description
         self.items = items
+        self.showingImage = showingImage
     }
-    func encode(to encoder: Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(title, forKey: .title)
-            try container.encode(description, forKey: .description)
-            try container.encode(items, forKey: .items)
-        }
 }
 extension Collection: Hashable {
     static func == (lhs: Collection, rhs: Collection) -> Bool {
@@ -69,7 +65,7 @@ extension Item: Hashable {
 
 struct ContentView: View {
   @State private var collections = [ //Sample Text used for testing
-    Collection(title:"", description: "", items:[Item(title:"")])]
+    Collection(title:"", description: "", items:[Item(title:"")], showingImage: false)]
   @State private var newCollectionTitle = ""
   @State private var newItemTitle = ""
   @State private var newDescription = ""
@@ -85,7 +81,7 @@ struct ContentView: View {
             NavigationView {
                 List {
                     ForEach($collections, id: \.self) { $collection in
-                        NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list:$collection.items, updater: $updater)) {
+                        NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list:$collection.items, updater: $updater, showingImage: $collection.showingImage)) {
                             HStack{
                                 Text(collection.title)
                                 Spacer()
@@ -159,36 +155,60 @@ struct ContentView: View {
                 Item(title: "Item 1"),
                 Item(title: "Item 2"),
                 Item(title: "Item 3")
-            ])
+            ], showingImage: false)
 
             collections.append(sampleCollection)
         }
 }
 
 struct DetailView: View {
+  @State private var listStyleDisplay = true
   var collectionTitle: String
   var collectionDescription: String
   @Binding var list: [Item]
   @Binding var updater: Bool
   @State private var showingPopover = false
   @State private var photoData = Data()
+  @Binding var showingImage: Bool
 
     var body: some View {
         ZStack{
                 List {
                     ForEach(list, id: \.self) { item in
-                        NavigationLink(destination:ItemView(ItemTitle: item.title)) {
-                            HStack{
-                                if let photoData = item.photo {
-                                    if let image = UIImage(data: photoData){
-                                        Image(uiImage:image)
-                                         .resizable()
-                                         .aspectRatio(contentMode: .fill)
-                                         .frame(width: 50, height: 50)
-                                         .clipped()
+                        NavigationLink(destination:ItemView(ItemTitle: item.title, ItemPhoto: item.photo ?? Data())) {
+                            if listStyleDisplay {
+                                HStack{
+                                    if showingImage == true {
+                                        if let photoData = item.photo {
+                                            if let image = UIImage(data: photoData){
+                                                Image(uiImage:image)
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: 50, height: 50)
+                                                    .clipped()
+                                            }
+                                        }
+                                    }
+                                    Text(item.title)
+                                }
+                            } else {
+                                HStack {
+                                    if showingImage == true {
+                                        if item.photo != nil {
+                                            if let photoData = item.photo {
+                                                if let image = UIImage(data: photoData){
+                                                    Image(uiImage:image)
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fill)
+                                                        .frame(width: 50, height: 50)
+                                                        .clipped()
+                                                }
+                                            }
+                                        } else {
+                                            Text(item.title)
+                                        }
                                     }
                                 }
-                                Text(item.title)
                             }
                         }
                     }
@@ -209,6 +229,23 @@ struct DetailView: View {
             .popover(isPresented: $showingPopover){
                 VStack{
                     Text(collectionDescription)
+                    HStack{
+                        Toggle("Display images: ",isOn: $showingImage)
+                            .onChange(of: showingImage) { _ in
+                                if !showingImage {
+                                    listStyleDisplay = true
+                                }
+                            }
+                            //.disabled(true) in case you want to disable control
+                        Spacer()
+                    }
+                    List {
+                        Picker("Display", selection: $listStyleDisplay) {
+                            Image(systemName: "list.dash").tag(true)
+                            Image(systemName: "squareshape.split.2x2").tag(false)
+                        }
+                        .pickerStyle(.segmented)
+                    }
                 }
             }
         }
@@ -222,9 +259,21 @@ struct DetailView: View {
 struct ItemView: View {
     var ItemTitle: String
     var isOnItemView = true
+    var ItemPhoto = Data()
     var body: some View{
         NavigationView {
-            Text("HIII")
+            VStack{
+                Text("HIII")
+                if let photoData = ItemPhoto {
+                    if let image = UIImage(data: photoData){
+                        Image(uiImage:image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 200, height: 200)
+                            .clipped()
+                    }
+                }
+            }
         }
         .navigationTitle(Text("\(ItemTitle)"))
     }
@@ -257,7 +306,7 @@ struct NewCollectionView: View {
         Spacer()
         Button(action: {
             if self.newCollectionTitle != ""{
-                self.collections.append(Collection(title:self.newCollectionTitle, description:self.newDescription, items:self.newItems))
+                self.collections.append(Collection(title:self.newCollectionTitle, description:self.newDescription, items:self.newItems, showingImage: false))
                 self.newCollectionTitle = ""
                 self.newDescription = ""
                 self.isAddingCollection = false
