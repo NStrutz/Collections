@@ -34,13 +34,11 @@ class Collection: Codable, Identifiable {
     var title:String
     var description:String
     var items:[Item]
-    var showingImage: Bool
     
-    init(title:String, description:String, items:[Item], showingImage: Bool){
+    init(title:String, description:String, items:[Item]){
         self.title = title
         self.description = description
         self.items = items
-        self.showingImage = showingImage
     }
 }
 extension Collection: Hashable {
@@ -65,7 +63,7 @@ extension Item: Hashable {
 
 struct ContentView: View {
   @State private var collections = [ //Sample Text used for testing
-    Collection(title:"", description: "", items:[Item(title:"")], showingImage: false)]
+    Collection(title:"", description: "", items:[Item(title:"")])]
   @State private var newCollectionTitle = ""
   @State private var newItemTitle = ""
   @State private var newDescription = ""
@@ -73,6 +71,7 @@ struct ContentView: View {
   @State private var isAddingCollection = false
   @State private var isAddingItem = false
   @State private var AddCollectionError = false
+  @State private var AddItemError = false
   @State private var updater = false
 
 
@@ -81,7 +80,7 @@ struct ContentView: View {
             NavigationView {
                 List {
                     ForEach($collections, id: \.self) { $collection in
-                        NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list:$collection.items, updater: $updater, showingImage: $collection.showingImage)) {
+                        NavigationLink(destination: DetailView(collectionTitle: collection.title,collectionDescription: collection.description,list:$collection.items, updater: $updater)) {
                             HStack{
                                 Text(collection.title)
                                 Spacer()
@@ -94,12 +93,13 @@ struct ContentView: View {
                     }
                     .onDelete(perform: delete)
                 }
+                .background(Color(.systemGroupedBackground))
                 .navigationTitle(Text("Collections"))
                 .sheet(isPresented: $isAddingCollection) {
                     NewCollectionView(isAddingCollection: $isAddingCollection,AddCollectionError: $AddCollectionError, collections: $collections, newCollectionTitle: $newCollectionTitle, newDescription: $newDescription, newItems: $newItems)
                 }
                 .sheet(isPresented:$isAddingItem){
-                    NewItemView(isAddingItem:$isAddingItem, collections: $collections, newItemTitle: $newItemTitle, updater: $updater)
+                    NewItemView(isAddingItem:$isAddingItem, collections: $collections, newItemTitle: $newItemTitle, updater: $updater,AddItemError: $AddItemError)
                 }
             }
             
@@ -107,7 +107,7 @@ struct ContentView: View {
                 Spacer()
                 HStack {
                     Spacer()
-                    AddView(isAddingCollection: $isAddingCollection, AddCollectionError: $AddCollectionError, isAddingItem: $isAddingItem)
+                    AddView(isAddingCollection: $isAddingCollection, AddCollectionError: $AddCollectionError, isAddingItem: $isAddingItem, AddItemError: $AddItemError)
                 }
             }
         }
@@ -155,30 +155,87 @@ struct ContentView: View {
                 Item(title: "Item 1"),
                 Item(title: "Item 2"),
                 Item(title: "Item 3")
-            ], showingImage: false)
+            ])
 
             collections.append(sampleCollection)
         }
 }
 
 struct DetailView: View {
-  @State private var listStyleDisplay = true
+  @State private var listStyleDisplay = "TextImg"
   var collectionTitle: String
   var collectionDescription: String
   @Binding var list: [Item]
   @Binding var updater: Bool
   @State private var showingPopover = false
   @State private var photoData = Data()
-  @Binding var showingImage: Bool
+  @State private var emptyData = Data()
 
     var body: some View {
         ZStack{
+            if listStyleDisplay == "Img" {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 0), GridItem(.flexible(), spacing: 0)], spacing: 0) {
+                        ForEach(list, id: \.self) { item in
+                            NavigationLink(destination:ItemView(ItemTitle: item.title, ItemPhoto: item.photo ?? Data())) {
+                                ZStack {
+                                    if item.photo != nil && item.photo != emptyData{
+                                        if let photoData = item.photo {
+                                            if let image = UIImage(data: photoData){
+                                                Image(uiImage:image)
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: UIScreen.main.bounds.width / 2, height: UIScreen.main.bounds.width / 2)
+                                                    .clipped()
+                                            }
+                                        }
+                                    } else {
+                                        Text(item.title)
+                                            .foregroundColor(Color.black)
+                                    }
+                                }
+                                .frame(width: UIScreen.main.bounds.width / 2, height: UIScreen.main.bounds.width / 2)
+                                .background(Color.white)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(Color.black.opacity(0.2), lineWidth: 2))
+                            }
+                        }
+                        .onDelete(perform: delete)
+                    }
+                }
+                .background(Color(.systemGroupedBackground))
+                .navigationTitle("\(collectionTitle)")
+            .if(isOnItemView == true){view in view.toolbar(.hidden)}
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Picker("Display", selection: $listStyleDisplay) {
+                        Image(systemName: "text.justify").tag("Text")
+                        Image(systemName: "list.dash").tag("TextImg")
+                        Image(systemName: "squareshape.split.2x2").tag("Img")
+                    }
+                    .pickerStyle(.segmented)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                      Button(action: {
+                        showingPopover = true
+                      }){
+                        Image(systemName: "info.circle")
+                          .imageScale(.large)
+                      }
+                }
+                  }
+            .popover(isPresented: $showingPopover){
+                VStack{
+                    Text(collectionDescription)
+                }
+            }
+            } else {
                 List {
                     ForEach(list, id: \.self) { item in
                         NavigationLink(destination:ItemView(ItemTitle: item.title, ItemPhoto: item.photo ?? Data())) {
-                            if listStyleDisplay {
+                            if listStyleDisplay == "TextImg"{
                                 HStack{
-                                    if showingImage == true {
                                         if let photoData = item.photo {
                                             if let image = UIImage(data: photoData){
                                                 Image(uiImage:image)
@@ -186,67 +243,47 @@ struct DetailView: View {
                                                     .aspectRatio(contentMode: .fill)
                                                     .frame(width: 50, height: 50)
                                                     .clipped()
-                                            }
                                         }
                                     }
                                     Text(item.title)
                                 }
-                            } else {
-                                HStack {
-                                    if showingImage == true {
-                                        if item.photo != nil {
-                                            if let photoData = item.photo {
-                                                if let image = UIImage(data: photoData){
-                                                    Image(uiImage:image)
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                        .clipped()
-                                                }
-                                            }
-                                        } else {
-                                            Text(item.title)
-                                        }
-                                    }
+                            }
+                            else if listStyleDisplay == "Text" {
+                                HStack{
+                                    Text(item.title)
                                 }
                             }
                         }
                     }
                     .onDelete(perform: delete)
                 }
+                .background(Color(.systemGroupedBackground))
                 .navigationTitle("\(collectionTitle)")
-            .if(isOnItemView == true){view in view.toolbar(.hidden)} //figure out how this works
+            .if(isOnItemView == true){view in view.toolbar(.hidden)}
             .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Picker("Display", selection: $listStyleDisplay) {
+                        Image(systemName: "text.justify").tag("Text")
+                        Image(systemName: "list.dash").tag("TextImg")
+                        Image(systemName: "squareshape.split.2x2").tag("Img")
+                    }
+                    .pickerStyle(.segmented)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
                       Button(action: {
                         showingPopover = true
                       }){
                         Image(systemName: "info.circle")
                           .imageScale(.large)
                       }
-                    }
+                }
                   }
             .popover(isPresented: $showingPopover){
                 VStack{
                     Text(collectionDescription)
-                    HStack{
-                        Toggle("Display images: ",isOn: $showingImage)
-                            .onChange(of: showingImage) { _ in
-                                if !showingImage {
-                                    listStyleDisplay = true
-                                }
-                            }
-                            //.disabled(true) in case you want to disable control
-                        Spacer()
-                    }
-                    List {
-                        Picker("Display", selection: $listStyleDisplay) {
-                            Image(systemName: "list.dash").tag(true)
-                            Image(systemName: "squareshape.split.2x2").tag(false)
-                        }
-                        .pickerStyle(.segmented)
-                    }
                 }
+            }
+                
             }
         }
     }
@@ -272,6 +309,12 @@ struct ItemView: View {
                             .frame(width: 200, height: 200)
                             .clipped()
                     }
+                }
+                Spacer()
+                Button(action: {
+                    //Need to add functionality
+                }) {
+                    Text("Delete Item")
                 }
             }
         }
@@ -305,8 +348,8 @@ struct NewCollectionView: View {
             .padding(.horizontal)
         Spacer()
         Button(action: {
-            if self.newCollectionTitle != ""{
-                self.collections.append(Collection(title:self.newCollectionTitle, description:self.newDescription, items:self.newItems, showingImage: false))
+            if self.newCollectionTitle.replacingOccurrences(of: " ", with: "") != ""{
+                self.collections.append(Collection(title:self.newCollectionTitle, description:self.newDescription, items:self.newItems))
                 self.newCollectionTitle = ""
                 self.newDescription = ""
                 self.isAddingCollection = false
@@ -347,19 +390,24 @@ struct NewItemView: View {
     @State private var selectedCollection: Collection? = nil
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
+    @Binding var AddItemError: Bool
 
     var body: some View {
       NavigationView {
           if selectedCollection == nil {
               VStack{
-                  List{
-                      ForEach(collections, id: \.self) { name in
-                          Button(action: {
-                              selectedCollection = name
-                          }){
-                              Text(name.title)
+                  if !collections.isEmpty{ //consider greying out the add items button
+                      List{
+                          ForEach(collections, id: \.self) { name in
+                              Button(action: {
+                                  selectedCollection = name
+                              }){
+                                  Text(name.title)
+                              }
                           }
                       }
+                  } else {
+                      Text("No Available Collections")
                   }
               }
               .navigationBarTitle(Text("Select Collection"))
@@ -392,15 +440,35 @@ struct NewItemView: View {
                   }
                   Spacer()
                   Button(action: {
-                      if let selectedCollection = selectedCollection {
-                          selectedCollection.items.append(Item(title:newItemTitle, photo:selectedPhotoData ?? Data())) // could add what to do if no image is added
-                          updater = !updater
+                      if self.newItemTitle.replacingOccurrences(of: " ", with: "") != ""{
+                          if let selectedCollection = selectedCollection {
+                              selectedCollection.items.append(Item(title:newItemTitle, photo:selectedPhotoData ?? Data()))
+                              updater = !updater
+                          }
+                          self.isAddingItem = false
+                          self.newItemTitle = ""
+                          self.AddItemError = false
+                      } else {
+                          self.AddItemError = true
                       }
-                      self.isAddingItem = false
-                      self.newItemTitle = ""
                   }){
                       Text("Add Item")
                   }
+                  .padding()
+                  .foregroundColor(.white)
+                  .background(Color.blue)
+                  .cornerRadius(10)
+                  .padding(.horizontal)
+                  .padding(.bottom)
+                  if self.AddItemError{
+                            Text("Missing Item Name")
+                          .foregroundColor(.red)
+                          .font(.system(size: 10))
+                        }
+                  if !self.AddItemError{
+                              Spacer()
+                          .frame(height: 18)
+                          }
               }
               .navigationBarTitle(Text("Add New Item"))
           }
@@ -412,6 +480,7 @@ struct AddView: View {
   @Binding var isAddingCollection: Bool
   @Binding var AddCollectionError: Bool
   @Binding var isAddingItem: Bool
+  @Binding var AddItemError: Bool
 
     var body: some View {
         Menu{
@@ -421,6 +490,7 @@ struct AddView: View {
             }
             Button("Add Item"){
                 self.isAddingItem = true
+                self.AddItemError = false
             }
         } label:{
             Label("", systemImage: "plus.circle.fill")
@@ -437,7 +507,8 @@ struct ContentView_Previews: PreviewProvider {
   }
 }
 
-//Add a message to add item screen when there is no collection
+
 //Delete data when closing add screen
 //Add rewards system??
-//find a way to do all the error handeling
+//Hold grid view item to enable delete button: after trying it didnt work
+//Add favorites
