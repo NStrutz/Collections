@@ -15,18 +15,22 @@ class Item: Identifiable, Codable {
     var id = UUID()
     var title:String
     var photo: Data?
+    var description: String
     
-    init(title:String){
+    init(title:String, description:String){
         self.title = title
+        self.description = description
     }
-    init(title:String, photo:Data){
+    init(title:String, photo:Data, description:String){
         self.title = title
         self.photo = photo
+        self.description = description
     }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(title, forKey: .title)
         try container.encode(photo, forKey: .photo)
+        try container.encode(description, forKey: .description)
     }
 }
 class Collection: Codable, Identifiable {
@@ -63,11 +67,12 @@ extension Item: Hashable {
 
 struct ContentView: View {
   @State private var collections = [ //Sample Text used for testing
-    Collection(title:"", description: "", items:[Item(title:"")])]
+    Collection(title:"", description: "", items:[Item(title:"", description:"")])]
   @State private var newCollectionTitle = ""
   @State private var newItemTitle = ""
+  @State private var newItemDescription = ""
   @State private var newDescription = ""
-  @State private var newItems = [Item(title:"Sample")]
+  @State private var newItems = [Item(title:"Sample", description: "Sample Description")]
   @State private var isAddingCollection = false
   @State private var isAddingItem = false
   @State private var AddCollectionError = false
@@ -97,9 +102,16 @@ struct ContentView: View {
                 .navigationTitle(Text("Collections"))
                 .sheet(isPresented: $isAddingCollection) {
                     NewCollectionView(isAddingCollection: $isAddingCollection,AddCollectionError: $AddCollectionError, collections: $collections, newCollectionTitle: $newCollectionTitle, newDescription: $newDescription, newItems: $newItems)
+                        .onDisappear() {
+                            newCollectionTitle = ""
+                            newDescription = ""
+                        }
                 }
                 .sheet(isPresented:$isAddingItem){
-                    NewItemView(isAddingItem:$isAddingItem, collections: $collections, newItemTitle: $newItemTitle, updater: $updater,AddItemError: $AddItemError)
+                    NewItemView(isAddingItem:$isAddingItem, collections: $collections, newItemTitle: $newItemTitle, updater: $updater, newItemDescription: $newItemDescription, AddItemError: $AddItemError)
+                        .onDisappear(){
+                            newItemTitle = ""
+                        }
                 }
             }
             
@@ -152,9 +164,9 @@ struct ContentView: View {
         }
     func addSampleCollection() {
             let sampleCollection = Collection(title: "Sample Collection", description: "This is a sample collection", items: [
-                Item(title: "Item 1"),
-                Item(title: "Item 2"),
-                Item(title: "Item 3")
+                Item(title: "Item 1", description: "This is a sample item"),
+                Item(title: "Item 2", description: "This is a sample item"),
+                Item(title: "Item 3", description: "This is a sample item")
             ])
 
             collections.append(sampleCollection)
@@ -177,7 +189,7 @@ struct DetailView: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 0), GridItem(.flexible(), spacing: 0)], spacing: 0) {
                         ForEach(list, id: \.self) { item in
-                            NavigationLink(destination:ItemView(ItemTitle: item.title, ItemPhoto: item.photo ?? Data())) {
+                            NavigationLink(destination:ItemView(ItemTitle: item.title, ItemDescription: item.description, ItemPhoto: item.photo ?? Data(), list: $list)) {
                                 ZStack {
                                     if item.photo != nil && item.photo != emptyData{
                                         if let photoData = item.photo {
@@ -200,8 +212,17 @@ struct DetailView: View {
                                     Rectangle()
                                         .stroke(Color.black.opacity(0.2), lineWidth: 2))
                             }
+                            .contextMenu {
+                                Button(role: .destructive)  {
+                                    if let index = list.firstIndex(of: item){
+                                        list.remove(at: index)
+                                        updater = !updater
+                                    }
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
-                        .onDelete(perform: delete)
                     }
                 }
                 .background(Color(.systemGroupedBackground))
@@ -233,7 +254,7 @@ struct DetailView: View {
             } else {
                 List {
                     ForEach(list, id: \.self) { item in
-                        NavigationLink(destination:ItemView(ItemTitle: item.title, ItemPhoto: item.photo ?? Data())) {
+                        NavigationLink(destination:ItemView(ItemTitle: item.title, ItemDescription: item.description, ItemPhoto: item.photo ?? Data(), list: $list)) {
                             if listStyleDisplay == "TextImg"{
                                 HStack{
                                         if let photoData = item.photo {
@@ -295,12 +316,19 @@ struct DetailView: View {
 
 struct ItemView: View {
     var ItemTitle: String
+    var ItemDescription: String
     var isOnItemView = true
     var ItemPhoto = Data()
+    @Binding var list: [Item]
     var body: some View{
         NavigationView {
             VStack{
-                Text("HIII")
+                if ItemDescription.replacingOccurrences(of: " ", with: "") != "" {
+                    Text("\(ItemDescription)")
+                } else {
+                    Text("No Description provided")
+                        .foregroundColor(Color.gray.opacity(0.7))
+                }
                 if let photoData = ItemPhoto {
                     if let image = UIImage(data: photoData){
                         Image(uiImage:image)
@@ -311,11 +339,6 @@ struct ItemView: View {
                     }
                 }
                 Spacer()
-                Button(action: {
-                    //Need to add functionality
-                }) {
-                    Text("Delete Item")
-                }
             }
         }
         .navigationTitle(Text("\(ItemTitle)"))
@@ -387,6 +410,7 @@ struct NewItemView: View {
     @Binding var collections: [Collection]
     @Binding var newItemTitle: String
     @Binding var updater: Bool
+    @Binding var newItemDescription: String
     @State private var selectedCollection: Collection? = nil
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
@@ -415,15 +439,18 @@ struct NewItemView: View {
           else {
               VStack {
                   Divider()
-                  TextField("Item title", text: $newItemTitle)
+                  TextField("Item Title", text: $newItemTitle)
                       .padding(.horizontal)
+                  TextField("Item Description", text: $newItemDescription)
+                      .padding(.horizontal)
+                  Divider()
                   HStack{
                       if let selectedPhotoData,
                          let image = UIImage(data: selectedPhotoData){
                           Image(uiImage:image)
                               .resizable()
                               .aspectRatio(contentMode: .fill)
-                              .frame(width: 50, height: 50, alignment: .leading)
+                              .frame(width: 100, height: 100, alignment: .leading)
                       }
                       Spacer()
                           .frame(width: 100)
@@ -442,7 +469,7 @@ struct NewItemView: View {
                   Button(action: {
                       if self.newItemTitle.replacingOccurrences(of: " ", with: "") != ""{
                           if let selectedCollection = selectedCollection {
-                              selectedCollection.items.append(Item(title:newItemTitle, photo:selectedPhotoData ?? Data()))
+                              selectedCollection.items.append(Item(title:newItemTitle, photo:selectedPhotoData ?? Data(), description: newItemDescription))
                               updater = !updater
                           }
                           self.isAddingItem = false
@@ -508,7 +535,6 @@ struct ContentView_Previews: PreviewProvider {
 }
 
 
-//Delete data when closing add screen
 //Add rewards system??
-//Hold grid view item to enable delete button: after trying it didnt work
 //Add favorites
+// maintain the type of view being shown when leaving collections
